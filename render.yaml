@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: flask-site
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: gunicorn meu_app:app
