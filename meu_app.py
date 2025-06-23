@@ -237,5 +237,8 @@ def admin():
         <a href="/dashboard">Voltar</a>
     ''', usuarios=usuarios, saques=saques)
 
+import os
+
 if __name__ == '__main__':
-    app.run(debug=True, port=5050)
+    port = int(os.environ.get('PORT', 10000))  # padrão local
+    app.run(host='0.0.0.0', port=port)
