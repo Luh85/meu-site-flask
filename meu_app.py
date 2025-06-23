@@ -34,10 +34,19 @@ def salvar_saques(saques):
     with open(SAQUES_FILE, 'w') as f:
         json.dump(saques, f)
 
-# Rotas
+# Rota principal COM ADSENSE NO HEAD
 @app.route('/')
 def index():
     return render_template_string('''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>Login / Cadastro</title>
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180"
+                crossorigin="anonymous"></script>
+    </head>
+    <body>
         <h2>Login</h2>
         <form method="post" action="/login">
             Email: <input type="email" name="email" required><br>
@@ -51,6 +60,8 @@ def index():
             Senha: <input type="password" name="senha" required><br>
             <input type="submit" value="Cadastrar">
         </form>
+    </body>
+    </html>
     ''')
 
 @app.route('/cadastro', methods=['POST'])
@@ -103,6 +114,8 @@ def dashboard():
     <!DOCTYPE html>
     <html>
     <head>
+        <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180"
+                crossorigin="anonymous"></script>
         <title>Dashboard</title>
         <style>
             body {
@@ -237,8 +250,6 @@ def admin():
         <a href="/dashboard">Voltar</a>
     ''', usuarios=usuarios, saques=saques)
 
-import os
-
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))  # padrão local
+    port = int(os.environ.get('PORT', 10000))
     app.run(host='0.0.0.0', port=port)
