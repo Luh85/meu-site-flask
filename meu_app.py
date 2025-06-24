@@ -13,15 +13,13 @@ UPLOAD_FOLDER = 'static/fotos'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # Inicializa arquivos
-for arquivo, padrao in [(USUARIOS_FILE, {}), (SAQUES_FILE, []), (MENSAGENS_FILE, [])]:
-    if not os.path.exists(arquivo):
-        with open(arquivo, 'w') as f:
-            json.dump(padrao, f)
+for arq, padrao in [(USUARIOS_FILE, {}), (SAQUES_FILE, []), (MENSAGENS_FILE, [])]:
+    if not os.path.exists(arq):
+        json.dump(padrao, open(arq, 'w'))
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
 
 # Utilitários
-
 def carregar_usuarios(): return json.load(open(USUARIOS_FILE))
 def salvar_usuarios(u): json.dump(u, open(USUARIOS_FILE, 'w'))
 def carregar_saques(): return json.load(open(SAQUES_FILE))
@@ -36,16 +34,19 @@ def foto(nome): return send_from_directory('static/fotos', nome)
 @app.route('/')
 def index():
     return render_template_string('''
-    <html><head><meta charset="utf-8">
-    <title>Bem-vindo</title>
+    <html><head><meta charset="utf-8"><title>Bem-vindo</title>
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180" crossorigin="anonymous"></script>
-    </head><body style="text-align:center">
-    <nav><a href="/">Home</a> | <a href="/login_page">Login</a> | <a href="/cadastro_page">Cadastro</a></nav>
-    <h1>Ganhe resolvendo captchas!</h1>
-    <p>Recompensas, saldo, chat e muito mais.</p>
-    <p><a href="/privacy">Política</a> | <a href="/terms">Termos</a> | <a href="/contact">Contato</a></p>
-    {% for _ in range(6) %}<div class="ads">[ANÚNCIO]</div>{% endfor %}
-    </body></html>
+    </head><body>
+    <div style="display:flex;">
+      <div style="width:20%">{% for _ in range(3) %}<div class="ads">[ANÚNCIO]</div>{% endfor %}</div>
+      <div style="width:60%; text-align:center">
+        <nav><a href="/">Home</a> | <a href="/login_page">Login</a> | <a href="/cadastro_page">Cadastro</a></nav>
+        <h1>Ganhe resolvendo captchas!</h1>
+        <p>Recompensas, saldo, chat e muito mais.</p>
+        <p><a href="/privacy">Política</a> | <a href="/terms">Termos</a> | <a href="/contact">Contato</a></p>
+      </div>
+      <div style="width:20%">{% for _ in range(3) %}<div class="ads">[ANÚNCIO]</div>{% endfor %}</div>
+    </div></body></html>
     ''')
 
 @app.route('/terms')
@@ -59,8 +60,7 @@ def info_pages():
 @app.route('/cadastro_page')
 def cadastro_page():
     return render_template_string('''
-    <html><head><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180" crossorigin="anonymous"></script></head>
-    <body style="text-align:center">
+    <html><body style="text-align:center">
     <h2>Cadastro</h2>
     <form method="post" action="/cadastro">
       Nome:<input name="nome"><br>Email:<input name="email"><br>Senha:<input name="senha" type="password"><br>
@@ -73,8 +73,7 @@ def cadastro_page():
 @app.route('/login_page')
 def login_page():
     return render_template_string('''
-    <html><head><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180" crossorigin="anonymous"></script></head>
-    <body style="text-align:center">
+    <html><body style="text-align:center">
     <h2>Login</h2>
     <form method="post" action="/login">
       Email:<input name="email"><br>Senha:<input name="senha" type="password"><br>
@@ -126,8 +125,13 @@ def dashboard():
                         user['friends'].append(e); msg = 'Amigo adicionado.'
                     else: msg = 'Já é amigo.'
                     salvar_usuarios(u)
+        if 'block' in request.form:
+            b = request.form['block']
+            if b in user['friends'] and b not in user['blocked']:
+                user['blocked'].append(b); msg = 'Usuário bloqueado.'
+                salvar_usuarios(u)
         if 'msg' in request.form and 'para' in request.form:
-            if request.form['para'] in user['friends']:
+            if request.form['para'] in user['friends'] and request.form['para'] not in user['blocked']:
                 msgs.append({'de': email, 'para': request.form['para'], 'txt': request.form['msg']})
                 salvar_msgs(msgs)
         if 'nome' in request.form:
@@ -141,28 +145,34 @@ def dashboard():
 
     amigos = [(e, u[e]['nome'], u[e]['id7'], u[e]['foto']) for e in user['friends'] if e in u]
     a,b = random.randint(1,10), random.randint(1,10); session['captcha'] = a+b
-    chat_msgs = [m for m in msgs if m['para']==email or m['de']==email][-10:]
+    chat_msgs = [m for m in carregar_msgs() if m['para']==email or m['de']==email][-10:]
     return render_template_string('''
-    <html><head><title>Dashboard</title></head><body style="text-align:center">
-    <h3>{{user['nome']}}</h3><p>ID: {{user['id7']}} | Saldo: R${{ '%.2f'|format(user['saldo']) }}</p>
+    <html><body><div style="display:flex;">
+    <div style="width:20%">{% for _ in range(3) %}<div class="ads">[AD]</div>{% endfor %}</div>
+    <div style="width:60%; text-align:center">
+    <h3><img src="/static/fotos/{{user['foto']}}" width="50"> {{user['nome']}}</h3>
+    <p>ID: {{user['id7']}} | Saldo: R${{ '%.2f'|format(user['saldo']) }}</p>
     <form method="post"><input name="resposta" placeholder="{{a}}+{{b}}?"><input type="submit" value="Captcha"></form>
     <p>{{msg}}</p>
     <form method="post"><input name="search" placeholder="Buscar email ou ID"><input type="submit" value="Adicionar"></form>
+    <form method="post"><input name="block" placeholder="Bloquear email"><input type="submit" value="Bloquear"></form>
     <form method="post" enctype="multipart/form-data">
       Nome:<input name="nome" value="{{user['nome']}}"> Foto:<input type="file" name="foto">
       <input type="submit" value="Atualizar">
     </form>
     <h4>Amigos:</h4>
     <ul>{% for e,n,i,f in amigos %}<li><img src="/static/fotos/{{f}}" width="30"> {{n}} - {{e}} (ID:{{i}})</li>{% endfor %}</ul>
-    <form method="post" action="/sacar">PIX:<input name="pix" required><input type="submit" value="Sacar"></form>
     <h4>Chat:</h4>
     <form method="post">
       Para:<input name="para"><br>Mensagem:<br><textarea name="msg"></textarea><br>
       <input type="submit" value="Enviar">
     </form>
     <div>{% for m in chat_msgs %}<p><b>{{m['de']}}</b>: {{m['txt']}}</p>{% endfor %}</div>
-    {% for _ in range(6) %}<div class="ads">[ANÚNCIO]</div>{% endfor %}
-    {% if email in admin_emails %}<p><a href="/admin">Admin</a></p>{% endif %}</body></html>
+    <form method="post" action="/sacar">PIX:<input name="pix" required><input type="submit" value="Sacar"></form>
+    {% if email in admin_emails %}<p><a href="/admin">Admin</a></p>{% endif %}
+    </div>
+    <div style="width:20%">{% for _ in range(3) %}<div class="ads">[AD]</div>{% endfor %}</div>
+    </div></body></html>
     ''', user=user, email=email, a=a, b=b, msg=msg, amigos=amigos, chat_msgs=chat_msgs, admin_emails=ADMIN_EMAILS)
 
 @app.route('/sacar', methods=['POST'])
