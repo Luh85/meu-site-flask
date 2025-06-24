@@ -1,202 +1,190 @@
-from flask import Flask, request, redirect, session, render_template_string, jsonify
-import json, os, random, uuid, datetime
+from flask import Flask, request, redirect, session, render_template_string, send_from_directory
+import json, os, random, uuid
+from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
 app.secret_key = 'segredo'
 
 USUARIOS_FILE = 'usuarios.json'
 SAQUES_FILE = 'saques.json'
-MENSAGENS_FILE = 'mensagens.json'
-GRUPOS_FILE = 'grupos.json'
 ADMIN_EMAILS = ['tattoozen18@gmail.com', 'paudoce176@gmail.com']
+UPLOAD_FOLDER = 'static/fotos'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
-# Inicializa os arquivos
-for f, v in [
-    (USUARIOS_FILE, {}), (SAQUES_FILE, []), 
-    (MENSAGENS_FILE, {}), (GRUPOS_FILE, {})
-]:
-    if not os.path.exists(f):
-        with open(f, 'w') as arq:
-            json.dump(v, arq)
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
-def ler_json(c):
-    with open(c, 'r') as f: return json.load(f)
-def salvar_json(c, d):
-    with open(c, 'w') as f: json.dump(d, f, indent=2)
+if not os.path.exists(USUARIOS_FILE):
+    json.dump({}, open(USUARIOS_FILE, 'w'))
+if not os.path.exists(SAQUES_FILE):
+    json.dump([], open(SAQUES_FILE, 'w'))
 
-def gerar_id7():
-    return str(random.randint(10**6, 10**7-1))
+def carregar_usuarios(): return json.load(open(USUARIOS_FILE))
+def salvar_usuarios(u): json.dump(u, open(USUARIOS_FILE, 'w'))
+def carregar_saques(): return json.load(open(SAQUES_FILE))
+def salvar_saques(s): json.dump(s, open(SAQUES_FILE, 'w'))
+def gerar_id7(): return str(random.randint(10**6, 10**7-1))
+
+@app.route('/static/fotos/<path:nome>')
+def foto(nome): return send_from_directory('static/fotos', nome)
 
 @app.route('/')
 def index():
-    return '''<h1>Bem-vindo</h1><p><a href='/login_page'>Login</a> | <a href='/cadastro_page'>Cadastro</a></p>'''
+    return render_template_string('''
+    <!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Bem-vindo | Site Captcha</title>
+      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180" crossorigin="anonymous"></script>
+    </head><body>
+    <div style="text-align:center">
+      <nav><a href="/">Home</a> | <a href="/login_page">Login</a> | <a href="/cadastro_page">Cadastro</a></nav>
+      <h1>Ganhe recompensas resolvendo captchas</h1>
+      <p>Resolva desafios, ganhe saldo e saque via PIX. Em breve: chat, amigos, rastreamento...</p>
+      <p><a href="/privacy">Política de Privacidade</a> | <a href="/terms">Termos de Uso</a> | <a href="/contact">Contato</a></p>
+      <div class="ads">[ANÚNCIO]</div>
+    </div>
+    </body></html>
+    ''')
+
+@app.route('/terms')
+@app.route('/privacy')
+@app.route('/contact')
+def info_pages():
+    page = request.path.strip('/')
+    titles = {'terms':'Termos de Uso','privacy':'Política de Privacidade','contact':'Contato'}
+    return f"<div style='text-align:center'><h2>{titles.get(page,page)}</h2><p>Conteúdo de {titles.get(page,page)} aqui.</p><p><a href='/'>Voltar</a></p></div>"
 
 @app.route('/cadastro_page')
 def cadastro_page():
-    return '''<form method="post" action="/cadastro">Email: <input name="email"><br>Senha: <input name="senha" type="password"><br><input type="submit" value="Cadastrar"></form>'''
+    return render_template_string('''
+      <html><head><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180" crossorigin="anonymous"></script><title>Cadastro</title></head>
+      <body style="text-align:center">
+      <h2>Cadastro</h2>
+      <form method="post" action="/cadastro">
+        Nome:<input name="nome" required><br>
+        Email:<input name="email" required><br>
+        Senha:<input name="senha" type="password" required><br>
+        <input type="submit" value="Cadastrar">
+      </form>
+      <p><a href="/">Voltar</a></p></body></html>
+    ''')
 
 @app.route('/login_page')
 def login_page():
-    return '''<form method="post" action="/login">Email: <input name="email"><br>Senha: <input name="senha" type="password"><br><input type="submit" value="Entrar"></form>'''
+    return render_template_string('''
+      <html><head><script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7180526871985180" crossorigin="anonymous"></script><title>Login</title></head>
+      <body style="text-align:center">
+      <h2>Login</h2>
+      <form method="post" action="/login">
+        Email:<input name="email" required><br>Senha:<input name="senha" type="password" required><br>
+        <input type="submit" value="Entrar">
+      </form>
+      <p><a href="/">Voltar</a></p></body></html>
+    ''')
 
 @app.route('/cadastro', methods=['POST'])
 def cadastro():
     email = request.form['email']
+    nome = request.form['nome']
     senha = request.form['senha']
-    usuarios = ler_json(USUARIOS_FILE)
+    usuarios = carregar_usuarios()
     if email in usuarios:
         return 'Email já cadastrado. <a href="/">Voltar</a>'
     usuarios[email] = {
-        'senha': senha, 'saldo': 0.0,
-        'id7': gerar_id7(), 'friends': [], 'bloqueados': []
+        'senha': senha, 'nome': nome, 'saldo': 0.0, 'id7': gerar_id7(),
+        'friends': [], 'blocked': [], 'foto': ''
     }
-    salvar_json(USUARIOS_FILE, usuarios)
+    salvar_usuarios(usuarios)
     return redirect('/login_page')
 
 @app.route('/login', methods=['POST'])
 def login():
-    email = request.form['email']
-    senha = request.form['senha']
-    usuarios = ler_json(USUARIOS_FILE)
+    email, senha = request.form['email'], request.form['senha']
+    usuarios = carregar_usuarios()
     if email in usuarios and usuarios[email]['senha'] == senha:
         session['email'] = email
         return redirect('/dashboard')
     return 'Login inválido. <a href="/login_page">Tente novamente</a>'
 
-@app.route('/dashboard', methods=['GET', 'POST'])
+@app.route('/dashboard', methods=['GET','POST'])
 def dashboard():
-    if 'email' not in session:
-        return redirect('/')
+    if 'email' not in session: return redirect('/')
     email = session['email']
-    usuarios = ler_json(USUARIOS_FILE)
-    u = usuarios[email]
-    msg = ''
-
+    usuarios = carregar_usuarios()
+    u = usuarios[email]; msg = ''
     if request.method == 'POST':
         if 'resposta' in request.form:
             try:
                 if int(request.form['resposta']) == session.get('captcha'):
-                    u['saldo'] += 0.33
-                    salvar_json(USUARIOS_FILE, usuarios)
-                    msg = 'Captcha certo! +R$ 0.33'
-                else:
-                    msg = 'Captcha incorreto.'
-            except:
-                msg = 'Erro na resposta.'
-        elif 'buscar' in request.form:
-            alvo = request.form['buscar']
-            if alvo in usuarios and alvo != email:
-                if alvo not in u['friends']:
-                    u['friends'].append(alvo)
-                    salvar_json(USUARIOS_FILE, usuarios)
-                    msg = 'Adicionado com sucesso!'
-                else:
-                    msg = 'Já está na lista.'
-        elif 'bloquear' in request.form:
-            alvo = request.form['bloquear']
-            if alvo in usuarios and alvo not in u['bloqueados']:
-                u['bloqueados'].append(alvo)
-                salvar_json(USUARIOS_FILE, usuarios)
-                msg = 'Usuário bloqueado.'
-
-    a, b = random.randint(1, 10), random.randint(1, 10)
+                    u['saldo'] += 0.33; msg = 'Captcha certo! +R$ 0.33'
+                else: msg = 'Captcha incorreto.'
+                salvar_usuarios(usuarios)
+            except: msg = 'Resposta inválida.'
+        if 'search' in request.form:
+            alvo = request.form['search']
+            if alvo in usuarios or alvo in [usuarios[k]['id7'] for k in usuarios]:
+                for e in usuarios:
+                    if e == alvo or usuarios[e]['id7'] == alvo:
+                        if e not in u['friends'] and e != email:
+                            u['friends'].append(e); msg = 'Adicionado.'
+                        else: msg = 'Já é amigo.'
+                        salvar_usuarios(usuarios)
+        if 'nome' in request.form:
+            u['nome'] = request.form['nome']; salvar_usuarios(usuarios); msg = 'Nome alterado.'
+        if 'foto' in request.files:
+            f = request.files['foto']
+            if f.filename:
+                fn = secure_filename(email + os.path.splitext(f.filename)[1])
+                path = os.path.join(app.config['UPLOAD_FOLDER'], fn)
+                f.save(path); u['foto'] = fn; salvar_usuarios(usuarios)
+    a,b = random.randint(1,10), random.randint(1,10)
     session['captcha'] = a + b
-    amigos = u['friends']
+    amigos = [(f, usuarios[f]['id7'], usuarios[f]['nome'], usuarios[f]['foto']) for f in u['friends'] if f in usuarios and f not in u['blocked']]
     return render_template_string('''
-    <h2>Olá {{email}}</h2>
-    <p>ID: {{id7}} | Saldo: R${{saldo}}</p>
-    <form method="post">Captcha: Quanto é {{a}}+{{b}}? <input name="resposta"><input type="submit"></form>
+    <html><head><title>Dashboard</title></head><body style="text-align:center">
+    <h2>Olá {{u['nome']}}</h2><p>Saldo: R${{ '%.2f'|format(u['saldo']) }}</p>
+    <form method="post"><input name="resposta" placeholder="{{a}}+{{b}}?">
+    <input type="submit" value="Captcha"></form>
     <p>{{msg}}</p>
-    <form method="post">Adicionar amigo: <input name="buscar"><input type="submit"></form>
-    <form method="post">Bloquear: <input name="bloquear"><input type="submit"></form>
-    <h3>Amigos:</h3><ul>{% for a in amigos %}<li>{{a}} | <a href='/chat/{{a}}'>Chat</a></li>{% endfor %}</ul>
-    <p><a href='/chat_global'>Chat Global</a></p>
-    <p><a href='/logout'>Sair</a></p>
-    {% if email in admin_emails %}<p><a href='/admin'>Admin</a></p>{% endif %}
-    ''', email=email, id7=u['id7'], saldo='%.2f' % u['saldo'], a=a, b=b, msg=msg, amigos=amigos, admin_emails=ADMIN_EMAILS)
-
-@app.route('/chat/<alvo>', methods=['GET', 'POST'])
-def chat_privado(alvo):
-    if 'email' not in session:
-        return redirect('/')
-    email = session['email']
-    if email == alvo:
-        return redirect('/dashboard')
-    usuarios = ler_json(USUARIOS_FILE)
-    if alvo not in usuarios:
-        return 'Usuário não encontrado'
-    if email in usuarios[alvo].get('bloqueados', []):
-        return 'Você foi bloqueado por esse usuário.'
-
-    conv_id = '-'.join(sorted([email, alvo]))
-    mensagens = ler_json(MENSAGENS_FILE)
-    if conv_id not in mensagens:
-        mensagens[conv_id] = []
-
-    if request.method == 'POST':
-        texto = request.form['mensagem']
-        mensagens[conv_id].append({'de': email, 'msg': texto, 'hora': str(datetime.datetime.now())})
-        salvar_json(MENSAGENS_FILE, mensagens)
-
-    historico = mensagens[conv_id][-20:]
-    chat_html = '<h2>Chat com %s</h2>' % alvo
-    chat_html += '<form method="post"><input name="mensagem" placeholder="Mensagem"><input type="submit"></form>'
-    for m in historico:
-        chat_html += f"<p><b>{m['de']}:</b> {m['msg']} <small>{m['hora']}</small></p>"
-    chat_html += '<p><a href="/dashboard">Voltar</a></p>'
-    return chat_html
-
-@app.route('/chat_global', methods=['GET','POST'])
-def chat_global():
-    if 'email' not in session:
-        return redirect('/')
-    email = session['email']
-    mensagens = ler_json(MENSAGENS_FILE)
-    if 'global' not in mensagens:
-        mensagens['global'] = []
-
-    if request.method == 'POST':
-        texto = request.form['mensagem']
-        mensagens['global'].append({'de': email, 'msg': texto, 'hora': str(datetime.datetime.now())})
-        salvar_json(MENSAGENS_FILE, mensagens)
-
-    historico = mensagens['global'][-30:]
-    chat_html = '<h2>Chat Global</h2>'
-    chat_html += '<form method="post"><input name="mensagem" placeholder="Mensagem"><input type="submit"></form>'
-    for m in historico:
-        chat_html += f"<p><b>{m['de']}:</b> {m['msg']} <small>{m['hora']}</small></p>"
-    chat_html += '<p><a href="/dashboard">Voltar</a></p>'
-    return chat_html
-
-@app.route('/admin')
-def admin():
-    if session.get('email') not in ADMIN_EMAILS:
-        return redirect('/')
-    usuarios = ler_json(USUARIOS_FILE)
-    saques = ler_json(SAQUES_FILE)
-    return render_template_string('''<h2>Admin</h2><ul>{% for u, d in usuarios.items() %}<li>{{u}} - Saldo: {{d['saldo']}}</li>{% endfor %}</ul><h3>Saques:</h3><ul>{% for s in saques %}<li>{{s['email']}}: R$ {{s['valor']}} (PIX: {{s['pix']}})</li>{% endfor %}</ul><a href='/dashboard'>Voltar</a>''', usuarios=usuarios, saques=saques)
+    <form method="post"><input name="search" placeholder="Buscar email ou ID">
+    <input type="submit" value="Adicionar"></form>
+    <form method="post" enctype="multipart/form-data">
+        Nome: <input name="nome" value="{{u['nome']}}">
+        Foto: <input type="file" name="foto">
+        <input type="submit" value="Atualizar">
+    </form>
+    <ul>{% for e,i,n,f in amigos %}<li><img src="/static/fotos/{{f}}" width="30"> {{n}} ({{e}} - ID:{{i}})</li>{% endfor %}</ul>
+    <form method="post" action="/sacar">PIX:<input name="pix" required><input type="submit" value="Sacar"></form>
+    {% if email in admin_emails %}<p><a href="/admin">Admin</a></p>{% endif %}
+    <div class="ads">[ANÚNCIO]</div>
+    </body></html>
+    ''', u=u, email=email, a=a, b=b, msg=msg, amigos=amigos, admin_emails=ADMIN_EMAILS)
 
 @app.route('/sacar', methods=['POST'])
 def sacar():
-    if 'email' not in session:
-        return redirect('/')
-    usuarios = ler_json(USUARIOS_FILE)
-    email = session['email']
-    u = usuarios[email]
+    if 'email' not in session: return redirect('/')
+    usuarios = carregar_usuarios()
+    u = usuarios[session['email']]
     if u['saldo'] >= 0.33:
-        saques = ler_json(SAQUES_FILE)
-        saques.append({'email': email, 'pix': request.form['pix'], 'valor': u['saldo']})
+        saques = carregar_saques()
+        saques.append({'email': session['email'], 'pix': request.form['pix'], 'valor': u['saldo']})
         u['saldo'] = 0.0
-        salvar_json(SAQUES_FILE, saques)
-        salvar_json(USUARIOS_FILE, usuarios)
-        return 'Saque solicitado. <a href="/dashboard">Voltar</a>'
+        salvar_usuarios(usuarios); salvar_saques(saques)
+        return 'Saque enviado! <a href="/dashboard">Voltar</a>'
     return 'Saldo insuficiente. <a href="/dashboard">Voltar</a>'
 
+@app.route('/admin')
+def admin():
+    if session.get('email') not in ADMIN_EMAILS: return redirect('/')
+    u = carregar_usuarios(); s = carregar_saques()
+    return render_template_string('''<h2>Admin</h2>
+    <ul>{% for e,d in u.items() %}<li>{{e}} - ID:{{d['id7']}} - R${{'%.2f'|format(d['saldo'])}}</li>{% endfor %}</ul>
+    <h3>Saques:</h3><ul>{% for x in s %}<li>{{x['email']}} PIX:{{x['pix']}} R${{'%.2f'|format(x['valor'])}}</li>{% endfor %}</ul>
+    <a href="/dashboard">Voltar</a>
+    ''', u=u, s=s)
+
 @app.route('/logout')
-def logout():
-    session.clear()
-    return redirect('/')
+def logout(): session.clear(); return redirect('/')
 
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))
-    app.run(host='0.0.0.0', port=port)
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 10000)))
